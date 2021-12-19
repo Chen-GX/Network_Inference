@@ -52,7 +52,7 @@ def nll_gaussian_loss(preds, target):
     return neg_log_p.sum() / target.size(0)
 
 
-def softargmax(pred, index, beta=10):  # pred[128, 16, 16, 2]
+def softargmax(pred, index, beta=1000):  # pred[128, 16, 16, 2]
     x = pred * beta
     x = x - torch.max(x, dim=3, keepdim=True).values
     x_exp = torch.exp(x)
@@ -63,10 +63,14 @@ def softargmax(pred, index, beta=10):  # pred[128, 16, 16, 2]
 
 def edge_accuracy_f1(preds, targets):
     # _, preds = preds.max(-1)  # 返回input张量中所有元素的最大值, dim=-1并减少一个维度
-    pred = preds.cpu().detach().numpy().flatten()
-    target = targets.cpu().detach().numpy().flatten()
-    acc = accuracy_score(target, pred)
-    f1 = f1_score(target, pred)
-    precision = precision_score(target, pred)
-    rec = recall_score(target, pred)
-    return acc, f1, precision, rec
+    acc, pre, rec, f1 = [], [], [], []
+    pred = preds.cpu().detach().numpy().reshape((preds.size(0), -1))
+    target = targets.cpu().detach().numpy().reshape((targets.size(0), -1))
+    for i, j in zip(target, pred):
+        # if np.sum(j) == 0:
+        #     print(1)
+        acc.append(accuracy_score(i, j))
+        pre.append(precision_score(i, j))
+        rec.append(recall_score(i, j))
+        f1.append(f1_score(i, j))
+    return np.mean(acc), np.mean(f1), np.mean(pre), np.mean(rec)

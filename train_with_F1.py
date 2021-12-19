@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim import lr_scheduler
-
+import random
 from torch.autograd import gradcheck
 from utils import *
 from modules import *
@@ -22,31 +22,31 @@ parser.add_argument('--random', action='store_true', default=True,  # 是否控�
 parser.add_argument('--seed', type=int, default=42, help='Random seed.')
 parser.add_argument('--epochs', type=int, default=5,
                     help='Number of epochs to train.')
-parser.add_argument('--batch_size', type=int, default=80,
+parser.add_argument('--batch_size', type=int, default=128,
                     help='Number of samples per batch.')
 parser.add_argument('--lr', type=float, default=0.001,
                     help='Initial learning rate.')
-parser.add_argument('--lr-decay', type=int, default=2,
+parser.add_argument('--lr_decay', type=int, default=2,
                     help='After how epochs to decay LR by a factor of gamma.')
 parser.add_argument('--gamma', type=float, default=0.5,
                     help='LR decay factor.')
 parser.add_argument('--weight_decay', type=float, default=5e-4, help='Weight decay (L2 loss on parameters).')
 parser.add_argument('--prediction_steps', type=int, default=1, metavar='N',
                     help='Num steps to predict before re-using teacher forcing.')
-
+parser.add_argument('--step', action='store_true', default=False)
 # ============ 模型参数 ==================
 parser.add_argument('--encoder', type=str, default='CNN',
-                    help='Type of path encoder model (CNN).')
+                    help='Type of path encoder model (CNN, CNN_Full).')
 parser.add_argument('--decoder', type=str, default='GAT',
                     help='Type of decoder model (GAT).')
 parser.add_argument('--decoder_hidden', type=int, default=8,
                     help='Number of hidden units.')
 parser.add_argument('--nb_heads', type=int, default=8, help='Number of head attentions.')
-parser.add_argument('--dropout', type=float, default=0.5, help='Dropout rate (1 - keep probability).')
+parser.add_argument('--dropout', type=float, default=0.6, help='Dropout rate (1 - keep probability).')
 parser.add_argument('--alpha', type=float, default=0.2, help='Alpha for the leaky_relu.')
 
 # ============ 数据集参数 ==================
-parser.add_argument('--num_nodes', type=int, default=10,
+parser.add_argument('--num_nodes', type=int, default=16,
                     help='Number of atoms in simulation.')
 parser.add_argument('--timesteps', type=int, default=10,
                     help='The number of time steps per sample.')
@@ -58,7 +58,7 @@ parser.add_argument('--save_folder', type=str, default='logs',
 parser.add_argument('--load-folder', type=str, default='',
                     help='Where to load the trained model if finetunning. ' +
                          'Leave empty to train from scratch')
-parser.add_argument('--load_data_log', type=str, default='80_10_n10_e20_tt10',
+parser.add_argument('--load_data_log', type=str, default='16000_2000_n16_e32_tt10',
                     help='The cascade data after processing.')
 
 args = parser.parse_args()
@@ -72,6 +72,7 @@ args.index = torch.tensor(index, dtype=torch.float32)
 
 # 设置随机种子
 if args.random:
+    random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     if args.cuda:
@@ -127,11 +128,12 @@ optimizer = optim.Adam(list(encoder.parameters()) + list(decoder.parameters()),
                        lr=args.lr)
 scheduler = lr_scheduler.StepLR(optimizer, step_size=args.lr_decay,
                                 gamma=args.gamma)
-
+I = torch.eye(args.num_nodes)
 if args.cuda:
     encoder.cuda()
     decoder.cuda()
     args.index = args.index.cuda()
+    I = I.cuda()
 
 
 def train(epoch, best_val_loss, encoder, decoder):
@@ -144,7 +146,8 @@ def train(epoch, best_val_loss, encoder, decoder):
 
     encoder.train()
     decoder.train()
-
+    if args.step:
+        print("Epoch{}:".format(epoch))
     for batch_idx, (data, network) in enumerate(train_loader):
         if args.cuda:
             data, network = data.cuda(), network.cuda()
@@ -155,19 +158,25 @@ def train(epoch, best_val_loss, encoder, decoder):
         logits = encoder(data)  # logits [128, 16, 16, 2]
         adj = softargmax(logits, args.index)  # A [128, 16, 16]
         pred_net = torch.round(adj.detach())
+        adj = adj + I
         output = decoder(data, adj, args.prediction_steps)
         target = data[:, args.prediction_steps:, :, :]
         loss = nll_gaussian_loss(output, target)
         loss.backward()
 
         optimizer.step()
-
         acc, f1, pre, rec = edge_accuracy_f1(pred_net, network)
         acc_train.append(acc)
         f1_train.append(f1)
         pre_train.append(pre)
         rec_train.append(rec)
         loss_train.append(loss.item())
+        if args.step:
+            print('loss_train: {:.10f}'.format(loss.item()),
+                  'acc_train: {:.10f}'.format(acc),
+                  'f1_train: {:.10f}'.format(f1),
+                  'pre_train: {:.10f}'.format(pre),
+                  'rec_train: {:.10f}'.format(rec))
 
     loss_val = []
     acc_val = []
@@ -184,6 +193,7 @@ def train(epoch, best_val_loss, encoder, decoder):
         logits = encoder(data)  # logits [128, 16, 16, 2]
         adj = softargmax(logits, args.index)  # A [128, 16, 16]
         pred_net = torch.round(adj.detach())
+        adj = adj + I
 
         output = decoder(data, adj, args.prediction_steps)
         target = data[:, args.prediction_steps:, :, :]
@@ -247,6 +257,7 @@ def test():
         logits = encoder(data)  # logits [128, 16, 16, 2]
         adj = softargmax(logits, args.index)  # A [128, 16, 16]
         pred_net = torch.round(adj.detach())
+        adj = adj + I
 
         output = decoder(data, adj, args.prediction_steps)
         target = data[:, args.prediction_steps:, :, :]

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import numpy as np
 
 class GraphAttentionLayer(nn.Module):
 
@@ -31,10 +31,11 @@ class GraphAttentionLayer(nn.Module):
         # adj 是邻接矩阵，h是[num_nodes, feature]矩阵
         Wh = torch.matmul(h, self.W)  # self.W [16, 8]  Wh[128, 16, 8]
         e = self._prepare_attentional_mechanism_input(Wh)
-        # zero_vec = -9e15 * torch.ones_like(e)
-        # attention = torch.where(adj > 0.1, e, zero_vec)  # 这里可能不是大于0
-        attention = e * adj + -9e15  # 避免出现0
-        attention = F.softmax(attention, dim=1)
+        zero_vec = -9e15 * torch.ones_like(e)
+        torch_0 = torch.zeros_like(e)
+        add_zero_vec = torch.where(adj > 0.5, torch_0, zero_vec)
+        attention = e * adj + add_zero_vec
+        attention = F.softmax(attention, dim=2)
         attention = F.dropout(attention, self.dropout, training=self.training)  # attention [128, 16, 16]
         h_prime = torch.matmul(attention, Wh)
 
