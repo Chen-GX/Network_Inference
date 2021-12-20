@@ -24,3 +24,5 @@ Please！！！
 联系高云君老师团队的学生，想要源码，等待回复...
 
 今天主要阅读论文
+
+感觉"Learning Diffusions without Timestamps"这篇文章主要是在处理不带时间戳的网络推断，和我的不是很贴近，所以先看其他两篇
