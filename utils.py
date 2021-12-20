@@ -49,7 +49,7 @@ def load_data(args):
 
 def nll_gaussian_loss(preds, target):
     neg_log_p = 0.5 * (preds - target) ** 2
-    return neg_log_p.sum() / target.size(0)
+    return neg_log_p.sum() / (target.size(0) * target.size(1) * target.size(2))
 
 
 def softargmax(pred, index, beta=1000):  # pred[128, 16, 16, 2]

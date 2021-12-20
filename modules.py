@@ -94,7 +94,7 @@ class GAT(nn.Module):
             pred = F.dropout(pred, self.dropout, training=self.training)
             pred = torch.cat([att(pred, adj) for att in self.attentions], dim=2)  # output pred [128, 16, 64]
             pred = F.dropout(pred, self.dropout, training=self.training)
-            pred = F.relu(self.out_att(pred, adj))  # output pred [128, 16, 16]
+            pred = F.elu(self.out_att(pred, adj))  # output pred [128, 16, 16]
             # pred = F.log_softmax(pred, dim=1)
             result[:, i, :, :] += pred
         pred_all = result[:, :-pred_step, :, :].contiguous()
