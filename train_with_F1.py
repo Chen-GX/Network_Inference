@@ -197,7 +197,7 @@ def train(epoch, best_val_loss, encoder, decoder):
 
         output = decoder(data, adj, args.prediction_steps)
         target = data[:, args.prediction_steps:, :, :]
-        loss = nll_gaussian_loss(output, target)
+        loss = nll_gaussian_loss(output, target) 
 
         acc, f1, pre, rec = edge_accuracy_f1(pred_net, network)
         acc_val.append(acc)
